@@ -4,267 +4,216 @@
 package bedrock
 
 import (
-	"reflect"
-	"time"
+	"context"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/bedrock"
-	"github.com/hashicorp/terraform-provider-aws/internal/flex"
+	bedrock_types "github.com/aws/aws-sdk-go-v2/service/bedrock/types"
+	"github.com/hashicorp/terraform-provider-aws/internal/framework/flex"
 )
 
-func flattenTrainingMetrics(metrics *bedrock.TrainingMetrics) []map[string]interface{} {
-	if metrics == nil {
-		return []map[string]interface{}{}
-	}
+// func flattenTrainingMetrics(metrics *bedrock.TrainingMetrics) []map[string]interface{} {
+// 	if metrics == nil {
+// 		return []map[string]interface{}{}
+// 	}
 
-	m := map[string]interface{}{
-		"training_loss": aws.Float64Value(metrics.TrainingLoss),
-	}
+// 	m := map[string]interface{}{
+// 		"training_loss": aws.Float64Value(metrics.TrainingLoss),
+// 	}
 
-	return []map[string]interface{}{m}
-}
+// 	return []map[string]interface{}{m}
+// }
 
-func flattenValidationDataConfig(config *bedrock.ValidationDataConfig) []map[string]interface{} {
-	if config == nil {
-		return []map[string]interface{}{}
-	}
+// func flattenValidationDataConfig(config *bedrock_types.ValidationDataConfig) []map[string]interface{} {
+// 	if config == nil {
+// 		return []map[string]interface{}{}
+// 	}
 
-	l := make([]map[string]interface{}, 0, len(config.Validators))
+// 	l := make([]map[string]interface{}, 0, len(config.Validators))
 
-	for _, validator := range config.Validators {
-		m := map[string]interface{}{
-			"validator": aws.StringValue(validator.S3Uri),
-		}
-		l = append(l, m)
-	}
+// 	for _, validator := range config.Validators {
+// 		m := map[string]interface{}{
+// 			"validator": aws.StringValue(validator.S3Uri),
+// 		}
+// 		l = append(l, m)
+// 	}
 
-	return l
-}
+// 	return l
+// }
 
-func flattenValidationMetrics(metrics []*bedrock.ValidatorMetric) []map[string]interface{} {
-	if metrics == nil {
-		return []map[string]interface{}{}
-	}
+// func flattenValidationMetrics(metrics []*bedrock.ValidatorMetric) []map[string]interface{} {
+// 	if metrics == nil {
+// 		return []map[string]interface{}{}
+// 	}
 
-	l := make([]map[string]interface{}, 0, len(metrics))
+// 	l := make([]map[string]interface{}, 0, len(metrics))
 
-	for _, metric := range metrics {
-		m := map[string]interface{}{
-			"validation_loss": aws.Float64Value(metric.ValidationLoss),
-		}
-		l = append(l, m)
-	}
+// 	for _, metric := range metrics {
+// 		m := map[string]interface{}{
+// 			"validation_loss": aws.Float64Value(metric.ValidationLoss),
+// 		}
+// 		l = append(l, m)
+// 	}
 
-	return l
-}
+// 	return l
+// }
 
-func flattenCustomModelSummaries(models []*bedrock.CustomModelSummary) []map[string]interface{} {
-	if len(models) == 0 {
-		return []map[string]interface{}{}
-	}
+// func flattenCustomModelSummaries(models []*bedrock_types.CustomModelSummary) []map[string]interface{} {
+// 	if len(models) == 0 {
+// 		return []map[string]interface{}{}
+// 	}
 
-	l := make([]map[string]interface{}, 0, len(models))
+// 	l := make([]map[string]interface{}, 0, len(models))
 
-	for _, model := range models {
-		m := map[string]interface{}{
-			"base_model_arn":  aws.StringValue(model.BaseModelArn),
-			"base_model_name": aws.StringValue(model.BaseModelName),
-			"model_arn":       aws.StringValue(model.ModelArn),
-			"model_name":      aws.StringValue(model.ModelName),
-			"creation_time":   aws.TimeValue(model.CreationTime).Format(time.RFC3339),
-		}
-		l = append(l, m)
-	}
+// 	for _, model := range models {
+// 		m := map[string]interface{}{
+// 			"base_model_arn":  aws.StringValue(model.BaseModelArn),
+// 			"base_model_name": aws.StringValue(model.BaseModelName),
+// 			"model_arn":       aws.StringValue(model.ModelArn),
+// 			"model_name":      aws.StringValue(model.ModelName),
+// 			"creation_time":   aws.TimeValue(model.CreationTime).Format(time.RFC3339),
+// 		}
+// 		l = append(l, m)
+// 	}
 
-	return l
-}
+// 	return l
+// }
 
-func flattenFoundationModelSummaries(models []*bedrock.FoundationModelSummary) []map[string]interface{} {
-	if len(models) == 0 {
-		return []map[string]interface{}{}
-	}
+// func flattenFoundationModelSummaries(models []*bedrock.FoundationModelSummary) []map[string]interface{} {
+// 	if len(models) == 0 {
+// 		return []map[string]interface{}{}
+// 	}
 
-	l := make([]map[string]interface{}, 0, len(models))
+// 	l := make([]map[string]interface{}, 0, len(models))
 
-	for _, model := range models {
-		m := map[string]interface{}{
-			"model_arn":                    aws.StringValue(model.ModelArn),
-			"model_id":                     aws.StringValue(model.ModelId),
-			"model_name":                   aws.StringValue(model.ModelName),
-			"provider_name":                aws.StringValue(model.ProviderName),
-			"customizations_supported":     aws.StringValueSlice(model.CustomizationsSupported),
-			"inference_types_supported":    aws.StringValueSlice(model.InferenceTypesSupported),
-			"input_modalities":             aws.StringValueSlice(model.InputModalities),
-			"output_modalities":            aws.StringValueSlice(model.OutputModalities),
-			"response_streaming_supported": aws.BoolValue(model.ResponseStreamingSupported),
-		}
+// 	for _, model := range models {
+// 		m := map[string]interface{}{
+// 			"model_arn":                    aws.StringValue(model.ModelArn),
+// 			"model_id":                     aws.StringValue(model.ModelId),
+// 			"model_name":                   aws.StringValue(model.ModelName),
+// 			"provider_name":                aws.StringValue(model.ProviderName),
+// 			"customizations_supported":     aws.StringValueSlice(model.CustomizationsSupported),
+// 			"inference_types_supported":    aws.StringValueSlice(model.InferenceTypesSupported),
+// 			"input_modalities":             aws.StringValueSlice(model.InputModalities),
+// 			"output_modalities":            aws.StringValueSlice(model.OutputModalities),
+// 			"response_streaming_supported": aws.BoolValue(model.ResponseStreamingSupported),
+// 		}
 
-		l = append(l, m)
-	}
+// 		l = append(l, m)
+// 	}
 
-	return l
-}
+// 	return l
+// }
 
-func flattenLoggingConfig(apiObject *bedrock.LoggingConfig) map[string]interface{} {
+func flattenLoggingConfig(ctx context.Context, apiObject *bedrock_types.LoggingConfig) *loggingConfigModel {
 	if apiObject == nil {
 		return nil
 	}
 
-	tfMap := map[string]interface{}{}
-
-	if v := apiObject.CloudWatchConfig; v != nil {
-		tfMap["cloud_watch_config"] = flattenCloudWatchConfig(v)
+	return &loggingConfigModel{
+		EmbeddingDataDeliveryEnabled: flex.BoolToFramework(ctx, apiObject.EmbeddingDataDeliveryEnabled),
+		ImageDataDeliveryEnabled:     flex.BoolToFramework(ctx, apiObject.ImageDataDeliveryEnabled),
+		TextDataDeliveryEnabled:      flex.BoolToFramework(ctx, apiObject.TextDataDeliveryEnabled),
+		CloudWatchConfig:             flattenCloudWatchConfig(ctx, apiObject.CloudWatchConfig),
+		S3Config:                     flattenS3Config(ctx, apiObject.S3Config),
 	}
-
-	tfMap["embedding_data_delivery_enabled"] = aws.Bool(*apiObject.EmbeddingDataDeliveryEnabled)
-	tfMap["image_data_delivery_enabled"] = aws.Bool(*apiObject.ImageDataDeliveryEnabled)
-	tfMap["text_data_delivery_enabled"] = aws.Bool(*apiObject.TextDataDeliveryEnabled)
-
-	if v := apiObject.S3Config; v != nil {
-		tfMap["s3_config"] = flattenS3Config(v)
-	}
-
-	return tfMap
 }
 
-func flattenCloudWatchConfig(apiObject *bedrock.CloudWatchConfig) map[string]interface{} {
+func flattenCloudWatchConfig(ctx context.Context, apiObject *bedrock_types.CloudWatchConfig) *cloudWatchConfigModel {
 	if apiObject == nil {
 		return nil
 	}
 
-	tfMap := map[string]interface{}{}
-
-	if v := apiObject.LargeDataDeliveryS3Config; v != nil {
-		tfMap["large_data_delivery_s3_config"] = flattenS3Config(v)
+	return &cloudWatchConfigModel{
+		LogGroupName:              flex.StringToFramework(ctx, apiObject.LogGroupName),
+		RoleArn:                   flex.StringToFramework(ctx, apiObject.RoleArn),
+		LargeDataDeliveryS3Config: flattenS3Config(ctx, apiObject.LargeDataDeliveryS3Config),
 	}
-	if v := apiObject.LogGroupName; v != nil {
-		tfMap["log_group_name"] = aws.StringValue(v)
-	}
-	if v := apiObject.RoleArn; v != nil {
-		tfMap["role_arn"] = aws.StringValue(v)
-	}
-
-	return tfMap
 }
 
-func flattenS3Config(apiObject *bedrock.S3Config) []interface{} {
+func flattenS3Config(ctx context.Context, apiObject *bedrock_types.S3Config) *s3ConfigModel {
 	if apiObject == nil {
 		return nil
 	}
 
-	tfMap := map[string]interface{}{}
-
-	if v := apiObject.BucketName; v != nil {
-		tfMap["bucket_name"] = aws.StringValue(v)
+	return &s3ConfigModel{
+		BucketName: flex.StringToFramework(ctx, apiObject.BucketName),
+		KeyPrefix:  flex.StringToFramework(ctx, apiObject.KeyPrefix),
 	}
-	if v := apiObject.KeyPrefix; v != nil {
-		tfMap["key_prefix"] = aws.StringValue(v)
-	}
-
-	return []interface{}{tfMap}
 }
 
-func expandLoggingConfig(tfMap map[string]interface{}) *bedrock.LoggingConfig {
-	if tfMap == nil {
+func expandLoggingConfig(model *loggingConfigModel) *bedrock_types.LoggingConfig {
+	if model == nil {
 		return nil
 	}
 
-	apiObject := &bedrock.LoggingConfig{}
-
-	if v, ok := tfMap["cloud_watch_config"].([]interface{}); ok && len(v) > 0 && v[0] != nil {
-		apiObject.CloudWatchConfig = expandCloudWatchConfig(v[0].(map[string]interface{}))
+	apiObject := &bedrock_types.LoggingConfig{
+		EmbeddingDataDeliveryEnabled: model.EmbeddingDataDeliveryEnabled.ValueBoolPointer(),
+		ImageDataDeliveryEnabled:     model.ImageDataDeliveryEnabled.ValueBoolPointer(),
+		TextDataDeliveryEnabled:      model.TextDataDeliveryEnabled.ValueBoolPointer(),
 	}
-
-	if v, ok := tfMap["embedding_data_delivery_enabled"].(bool); ok {
-		apiObject.EmbeddingDataDeliveryEnabled = aws.Bool(v)
+	if model.CloudWatchConfig != nil {
+		apiObject.CloudWatchConfig = expandCloudWatchConfig(model.CloudWatchConfig)
 	}
-
-	if v, ok := tfMap["image_data_delivery_enabled"].(bool); ok {
-		apiObject.ImageDataDeliveryEnabled = aws.Bool(v)
-	}
-
-	if v, ok := tfMap["text_data_delivery_enabled"].(bool); ok {
-		apiObject.TextDataDeliveryEnabled = aws.Bool(v)
-	}
-
-	if v, ok := tfMap["s3_config"].([]interface{}); ok && len(v) > 0 && v[0] != nil {
-		apiObject.S3Config = expandS3Config(v[0].(map[string]interface{}))
+	if model.S3Config != nil {
+		apiObject.S3Config = expandS3Config(model.S3Config)
 	}
 
 	return apiObject
 }
 
-func expandCloudWatchConfig(tfMap map[string]interface{}) *bedrock.CloudWatchConfig {
-	if tfMap == nil {
+func expandCloudWatchConfig(model *cloudWatchConfigModel) *bedrock_types.CloudWatchConfig {
+	if model == nil {
 		return nil
 	}
 
-	apiObject := &bedrock.CloudWatchConfig{}
-
-	if v, ok := tfMap["large_data_delivery_s3_config"].([]interface{}); ok && len(v) > 0 && v[0] != nil {
-		apiObject.LargeDataDeliveryS3Config = expandS3Config(v[0].(map[string]interface{}))
-	}
-
-	if v, ok := tfMap["log_group_name"].(string); ok && v != "" {
-		apiObject.LogGroupName = aws.String(v)
-	}
-
-	if v, ok := tfMap["role_arn"].(string); ok && v != "" {
-		apiObject.RoleArn = aws.String(v)
+	apiObject := &bedrock_types.CloudWatchConfig{
+		LogGroupName:              model.LogGroupName.ValueStringPointer(),
+		RoleArn:                   model.RoleArn.ValueStringPointer(),
+		LargeDataDeliveryS3Config: expandS3Config(model.LargeDataDeliveryS3Config),
 	}
 
 	return apiObject
 }
 
-func expandS3Config(tfMap map[string]interface{}) *bedrock.S3Config {
-	if tfMap == nil {
+func expandS3Config(model *s3ConfigModel) *bedrock_types.S3Config {
+	if model == nil {
 		return nil
 	}
 
-	apiObject := &bedrock.S3Config{}
-
-	if v, ok := tfMap["bucket_name"].(string); ok && v != "" {
-		apiObject.BucketName = aws.String(v)
-	}
-	if v, ok := tfMap["key_prefix"].(string); ok && v != "" {
-		apiObject.KeyPrefix = aws.String(v)
+	apiObject := &bedrock_types.S3Config{
+		BucketName: model.BucketName.ValueStringPointer(),
+		KeyPrefix:  model.KeyPrefix.ValueStringPointer(),
 	}
 
 	return apiObject
 }
 
-func expandVPCConfig(tfList []interface{}) *bedrock.VpcConfig {
+func expandVpcConfig(ctx context.Context, tfList []vpcConfigModel) []bedrock_types.VpcConfig {
 	if len(tfList) == 0 {
 		return nil
 	}
+	var vpcConfigs []bedrock_types.VpcConfig
 
-	apiObject := &bedrock.VpcConfig{}
-
-	tfMap := tfList[0].(map[string]interface{})
-	if v, ok := tfMap["security_group_ids"]; ok {
-		apiObject.SecurityGroupIds = flex.ExpandStringList(v.([]interface{}))
+	for _, item := range tfList {
+		vpcConfig := bedrock_types.VpcConfig{
+			SecurityGroupIds: flex.ExpandFrameworkStringValueSet(ctx, item.SecurityGroupIds),
+			SubnetIds:        flex.ExpandFrameworkStringValueSet(ctx, item.SubnetIds),
+		}
+		vpcConfigs = append(vpcConfigs, vpcConfig)
 	}
 
-	if v, ok := tfMap["subnet_ids"]; ok {
-		apiObject.SubnetIds = flex.ExpandStringList(v.([]interface{}))
-	}
-
-	if reflect.DeepEqual(&bedrock.VpcConfig{}, apiObject) {
-		return nil
-	}
-
-	return apiObject
+	return vpcConfigs
 }
 
-func expandValidationDataConfig(tfList []*string) *bedrock.ValidationDataConfig {
-	if len(tfList) == 0 {
+func expandValidationDataConfig(ctx context.Context, model *validationDataConfigModel) *bedrock_types.ValidationDataConfig {
+	if model == nil {
 		return nil
 	}
 
-	apiObject := &bedrock.ValidationDataConfig{}
-
-	for _, v := range tfList {
-		apiObject.Validators = append(apiObject.Validators, &bedrock.Validator{S3Uri: v})
+	apiObject := &bedrock_types.ValidationDataConfig{}
+	for _, validator := range flex.ExpandFrameworkStringValueSet(ctx, model.Validators) {
+		apiObject.Validators = append(apiObject.Validators, bedrock_types.Validator{
+			S3Uri: &validator,
+		})
 	}
 
 	return apiObject

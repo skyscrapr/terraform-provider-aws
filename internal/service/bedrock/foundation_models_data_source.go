@@ -6,59 +6,73 @@ package bedrock
 import (
 	"context"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+	"github.com/aws/aws-sdk-go-v2/service/bedrock"
+	bedrock_types "github.com/aws/aws-sdk-go-v2/service/bedrock/types"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-provider-aws/internal/framework"
+	"github.com/hashicorp/terraform-provider-aws/internal/framework/flex"
 )
 
-// @SDKDataSource("aws_bedrock_foundation_models")
-func DataSourceFoundationModels() *schema.Resource {
-	return &schema.Resource{
-		ReadWithoutTimeout: dataSourceFoundationModelsRead,
-		Schema: map[string]*schema.Schema{
-			"model_summaries": {
-				Type:     schema.TypeList,
+// @FrameworkDataSource
+func newDataSourceFoundationModels(context.Context) (datasource.DataSourceWithConfigure, error) {
+	return &dataSourceFoundationModels{}, nil
+}
+
+type dataSourceFoundationModels struct {
+	framework.DataSourceWithConfigure
+}
+
+// Metadata should return the full name of the data source, such as
+// examplecloud_thing.
+func (d *dataSourceFoundationModels) Metadata(_ context.Context, request datasource.MetadataRequest, response *datasource.MetadataResponse) {
+	response.TypeName = "aws_bedrock_foundation_models"
+}
+
+// Schema returns the schema for this data source.
+func (d *dataSourceFoundationModels) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
 				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"model_arn": {
-							Type:     schema.TypeString,
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"model_summaries": schema.ListNestedBlock{
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"model_arn": schema.StringAttribute{
 							Computed: true,
 						},
-						"model_id": {
-							Type:     schema.TypeString,
+						"model_id": schema.StringAttribute{
 							Computed: true,
 						},
-						"model_name": {
-							Type:     schema.TypeString,
+						"model_name": schema.StringAttribute{
 							Computed: true,
 						},
-						"provider_name": {
-							Type:     schema.TypeString,
+						"provider_name": schema.StringAttribute{
 							Computed: true,
 						},
-						"customizations_supported": {
-							Type:     schema.TypeSet,
-							Computed: true,
-							Elem:     &schema.Schema{Type: schema.TypeString},
+						"customizations_supported": schema.SetAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
 						},
-						"inference_types_supported": {
-							Type:     schema.TypeSet,
-							Computed: true,
-							Elem:     &schema.Schema{Type: schema.TypeString},
+						"inference_types_supported": schema.SetAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
 						},
-						"input_modalities": {
-							Type:     schema.TypeSet,
-							Computed: true,
-							Elem:     &schema.Schema{Type: schema.TypeString},
+						"input_modalities": schema.SetAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
 						},
-						"output_modalities": {
-							Type:     schema.TypeSet,
-							Computed: true,
-							Elem:     &schema.Schema{Type: schema.TypeString},
+						"output_modalities": schema.SetAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
 						},
-						"response_streaming_supported": {
-							Type:     schema.TypeBool,
+						"response_streaming_supported": schema.BoolAttribute{
 							Computed: true,
 						},
 					},
@@ -68,18 +82,110 @@ func DataSourceFoundationModels() *schema.Resource {
 	}
 }
 
-func dataSourceFoundationModelsRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).BedrockConn(ctx)
+// Read is called when the provider must read data source values in order to update state.
+// Config values should be read from the ReadRequest and new state values set on the ReadResponse.
+func (d *dataSourceFoundationModels) Read(ctx context.Context, request datasource.ReadRequest, response *datasource.ReadResponse) {
+	var data foundationModels
 
-	models, err := conn.ListFoundationModelsWithContext(ctx, nil)
+	response.Diagnostics.Append(request.Config.Get(ctx, &data)...)
+
+	if response.Diagnostics.HasError() {
+		return
+	}
+
+	conn := d.Meta().BedrockClient(ctx)
+
+	models, err := conn.ListFoundationModels(ctx, nil)
 	if err != nil {
-		return diag.Errorf("reading Bedrock Foundation Models: %s", err)
+		response.Diagnostics.AddError("reading Bedrock Foundation Models", err.Error())
+		return
 	}
 
-	d.SetId(meta.(*conns.AWSClient).Region)
-	if err := d.Set("model_summaries", flattenFoundationModelSummaries(models.ModelSummaries)); err != nil {
-		return diag.Errorf("setting model_summaries: %s", err)
+	data.ID = flex.StringToFramework(ctx, &d.Meta().Region)
+	response.Diagnostics.Append(data.refreshFromOutput(ctx, models)...)
+	response.Diagnostics.Append(response.State.Set(ctx, &data)...)
+}
+
+type foundationModels struct {
+	ID             types.String `tfsdk:"id"`
+	ModelSummaries types.List   `tfsdk:"model_summaries"`
+}
+
+func (fms *foundationModels) refreshFromOutput(ctx context.Context, out *bedrock.ListFoundationModelsOutput) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if out == nil {
+		return diags
 	}
 
-	return nil
+	fms.ModelSummaries = flattenFoundationModelSummaries(ctx, out.ModelSummaries)
+
+	return diags
+}
+
+type foundationModelSummary struct {
+	ModelID                    types.String `tfsdk:"model_id"`
+	ModelArn                   types.String `tfsdk:"model_arn"`
+	ModelName                  types.String `tfsdk:"model_name"`
+	ProviderName               types.String `tfsdk:"provider_name"`
+	CustomizationsSupported    types.Set    `tfsdk:"customizations_supported"`
+	InferenceTypesSupported    types.Set    `tfsdk:"inference_types_supported"`
+	InputModalities            types.Set    `tfsdk:"input_modalities"`
+	OutputModalities           types.Set    `tfsdk:"output_modalities"`
+	ResponseStreamingSupported types.Bool   `tfsdk:"response_streaming_supported"`
+}
+
+func flattenFoundationModelSummaries(ctx context.Context, models []bedrock_types.FoundationModelSummary) types.List {
+	attributeTypes := flex.AttributeTypesMust[foundationModelSummary](ctx)
+
+	// HACK: Reflection used above to build the attributeTypes cannot determing the ElemType
+	attributeTypes["customizations_supported"] = types.SetType{ElemType: types.StringType}
+	attributeTypes["inference_types_supported"] = types.SetType{ElemType: types.StringType}
+	attributeTypes["input_modalities"] = types.SetType{ElemType: types.StringType}
+	attributeTypes["output_modalities"] = types.SetType{ElemType: types.StringType}
+
+	elemType := types.ObjectType{AttrTypes: attributeTypes}
+
+	if models == nil {
+		return types.ListNull(elemType)
+	}
+
+	attrs := make([]attr.Value, 0, len(models))
+	for _, model := range models {
+		attr := map[string]attr.Value{}
+		attr["model_arn"] = flex.StringToFramework(ctx, model.ModelArn)
+		attr["model_id"] = flex.StringToFramework(ctx, model.ModelId)
+		attr["model_name"] = flex.StringToFramework(ctx, model.ModelName)
+		attr["provider_name"] = flex.StringToFramework(ctx, model.ProviderName)
+
+		customizationsSupported := make([]string, 0, len(model.CustomizationsSupported))
+		for _, r := range model.CustomizationsSupported {
+			customizationsSupported = append(customizationsSupported, string(r))
+		}
+		attr["customizations_supported"] = flex.FlattenFrameworkStringValueSet(ctx, customizationsSupported)
+
+		inferenceTypesSupported := make([]string, 0, len(model.InferenceTypesSupported))
+		for _, r := range model.InferenceTypesSupported {
+			inferenceTypesSupported = append(inferenceTypesSupported, string(r))
+		}
+		attr["inference_types_supported"] = flex.FlattenFrameworkStringValueSet(ctx, inferenceTypesSupported)
+
+		inputModalities := make([]string, 0, len(model.InputModalities))
+		for _, r := range model.InputModalities {
+			inputModalities = append(inputModalities, string(r))
+		}
+		attr["input_modalities"] = flex.FlattenFrameworkStringValueSet(ctx, inputModalities)
+
+		outputModalities := make([]string, 0, len(model.OutputModalities))
+		for _, r := range model.OutputModalities {
+			outputModalities = append(outputModalities, string(r))
+		}
+		attr["output_modalities"] = flex.FlattenFrameworkStringValueSet(ctx, outputModalities)
+
+		attr["response_streaming_supported"] = flex.BoolToFramework(ctx, model.ResponseStreamingSupported)
+		val := types.ObjectValueMust(attributeTypes, attr)
+		attrs = append(attrs, val)
+	}
+
+	return types.ListValueMust(elemType, attrs)
 }

@@ -52,9 +52,7 @@ resource aws_s3_bucket bedrock_logging {
   bucket        = "bedrock-logging-%[1]s"
   force_destroy = true
   lifecycle {
-    ignore_changes = [
-      tags["CreatorId"], tags["CreatorName"],
-    ]
+    ignore_changes = ["tags", "tags_all"]
   }
 }
 
@@ -81,7 +79,7 @@ resource "aws_s3_bucket_policy" "bedrock_logging" {
           "aws:SourceAccount": "${data.aws_caller_identity.current.account_id}"
         },
         "ArnLike": {
-          "aws:SourceArn": "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.name}:${data.aws_caller_identity.current.account_id}:*"
+          "aws:SourceArn": "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
         }
       }
     }

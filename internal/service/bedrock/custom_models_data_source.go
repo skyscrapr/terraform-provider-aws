@@ -6,39 +6,55 @@ package bedrock
 import (
 	"context"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/hashicorp/terraform-provider-aws/internal/conns"
+	"github.com/aws/aws-sdk-go-v2/service/bedrock"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-provider-aws/internal/framework"
+	"github.com/hashicorp/terraform-provider-aws/internal/framework/flex"
 )
 
-// @SDKDataSource("aws_bedrock_custom_models")
-func DataSourceCustomModels() *schema.Resource {
-	return &schema.Resource{
-		ReadWithoutTimeout: dataSourceCustomModelsRead,
-		Schema: map[string]*schema.Schema{
-			"model_summaries": {
-				Type:     schema.TypeList,
+// @FrameworkDataSource
+func newDataSourceCustomModels(context.Context) (datasource.DataSourceWithConfigure, error) {
+	return &dataSourceCustomModels{}, nil
+}
+
+type dataSourceCustomModels struct {
+	framework.DataSourceWithConfigure
+}
+
+// Metadata should return the full name of the data source, such as
+// examplecloud_thing.
+func (d *dataSourceCustomModels) Metadata(_ context.Context, request datasource.MetadataRequest, response *datasource.MetadataResponse) {
+	response.TypeName = "aws_bedrock_custom_models"
+}
+
+// Schema returns the schema for this data source.
+func (d *dataSourceCustomModels) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
 				Computed: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"base_model_arn": {
-							Type:     schema.TypeString,
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"model_summaries": schema.ListNestedBlock{
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"base_model_arn": schema.StringAttribute{
 							Computed: true,
 						},
-						"base_model_name": {
-							Type:     schema.TypeString,
+						"base_model_name": schema.StringAttribute{
 							Computed: true,
 						},
-						"model_arn": {
-							Type:     schema.TypeString,
+						"model_arn": schema.StringAttribute{
 							Computed: true,
 						},
-						"model_name": {
-							Type:     schema.TypeString,
+						"model_name": schema.StringAttribute{
 							Computed: true,
 						},
-						"creation_time": {
-							Type:     schema.TypeString,
+						"creation_time": schema.StringAttribute{
 							Computed: true,
 						},
 					},
@@ -48,18 +64,66 @@ func DataSourceCustomModels() *schema.Resource {
 	}
 }
 
-func dataSourceCustomModelsRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).BedrockConn(ctx)
+// Read is called when the provider must read data source values in order to update state.
+// Config values should be read from the ReadRequest and new state values set on the ReadResponse.
+func (d *dataSourceCustomModels) Read(ctx context.Context, request datasource.ReadRequest, response *datasource.ReadResponse) {
+	var data customModels
 
-	models, err := conn.ListCustomModelsWithContext(ctx, nil)
+	response.Diagnostics.Append(request.Config.Get(ctx, &data)...)
+
+	if response.Diagnostics.HasError() {
+		return
+	}
+
+	conn := d.Meta().BedrockClient(ctx)
+
+	models, err := conn.ListCustomModels(ctx, nil)
 	if err != nil {
-		return diag.Errorf("reading Bedrock Custom Models: %s", err)
+		response.Diagnostics.AddError("reading Bedrock Custom Models", err.Error())
+		return
 	}
 
-	d.SetId(meta.(*conns.AWSClient).Region)
-	if err := d.Set("model_summaries", flattenCustomModelSummaries(models.ModelSummaries)); err != nil {
-		return diag.Errorf("setting model_summaries: %s", err)
-	}
-
-	return nil
+	data.ID = flex.StringToFramework(ctx, &d.Meta().Region)
+	response.Diagnostics.Append(data.refreshFromOutput(ctx, models)...)
+	response.Diagnostics.Append(response.State.Set(ctx, &data)...)
 }
+
+type customModels struct {
+	ID             types.String `tfsdk:"id"`
+	ModelSummaries types.List   `tfsdk:"model_summaries"`
+}
+
+func (cms *customModels) refreshFromOutput(ctx context.Context, out *bedrock.ListCustomModelsOutput) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if out == nil {
+		return diags
+	}
+
+	// cms.ModelSummaries = flattenCustomModelSummaries(ctx, out.ModelSummaries)
+
+	return diags
+}
+
+// func flattenCustomModelSummaries(ctx context.Context, models []bedrock_types.CustomModelSummary) types.List {
+// 	attributeTypes := flex.AttributeTypesMust[customModels](ctx)
+// 	elemType := types.ObjectType{AttrTypes: attributeTypes}
+
+// 	if models == nil {
+// 		return types.ListNull(elemType)
+// 	}
+
+// 	attrs := make([]attr.Value, 0, len(models))
+// 	for _, model := range models {
+// 		attr := map[string]attr.Value{}
+// 		attr["base_model_arn"] = flex.StringToFramework(ctx, model.BaseModelArn)
+// 		attr["base_model_name"] = flex.StringToFramework(ctx, model.BaseModelName)
+// 		attr["model_arn"] = flex.StringToFramework(ctx, model.ModelArn)
+// 		attr["model_name"] = flex.StringToFramework(ctx, model.ModelName)
+// 		attr["creation_time"] = flex.StringValueToFramework[string](ctx, model.CreationTime.Format(time.RFC3339))
+// 		val := types.ObjectValueMust(attributeTypes, attr)
+// 		attrs = append(attrs, val)
+// 	}
+
+// 	return types.ListValueMust(elemType, attrs)
+// }

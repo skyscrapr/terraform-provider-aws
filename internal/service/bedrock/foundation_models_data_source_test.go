@@ -32,7 +32,6 @@ func TestAccBedrockFoundationModelsDataSource_basic(t *testing.T) {
 
 func testAccFoundationModelsDataSourceConfig_basic() string {
 	return `
-data "aws_bedrock_foundation_models" "test" {
-}
+data "aws_bedrock_foundation_models" "test" {}
 `
 }
