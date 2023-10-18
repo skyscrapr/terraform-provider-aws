@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
+	bedrock_types "github.com/aws/aws-sdk-go-v2/service/bedrock/types"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -192,4 +193,88 @@ func (r *resourceModelInvocationLoggingConfiguration) Delete(ctx context.Context
 
 func (r *resourceModelInvocationLoggingConfiguration) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func flattenLoggingConfig(ctx context.Context, apiObject *bedrock_types.LoggingConfig) *loggingConfigModel {
+	if apiObject == nil {
+		return nil
+	}
+
+	return &loggingConfigModel{
+		EmbeddingDataDeliveryEnabled: flex.BoolToFramework(ctx, apiObject.EmbeddingDataDeliveryEnabled),
+		ImageDataDeliveryEnabled:     flex.BoolToFramework(ctx, apiObject.ImageDataDeliveryEnabled),
+		TextDataDeliveryEnabled:      flex.BoolToFramework(ctx, apiObject.TextDataDeliveryEnabled),
+		CloudWatchConfig:             flattenCloudWatchConfig(ctx, apiObject.CloudWatchConfig),
+		S3Config:                     flattenS3Config(ctx, apiObject.S3Config),
+	}
+}
+
+func flattenCloudWatchConfig(ctx context.Context, apiObject *bedrock_types.CloudWatchConfig) *cloudWatchConfigModel {
+	if apiObject == nil {
+		return nil
+	}
+
+	return &cloudWatchConfigModel{
+		LogGroupName:              flex.StringToFramework(ctx, apiObject.LogGroupName),
+		RoleArn:                   flex.StringToFramework(ctx, apiObject.RoleArn),
+		LargeDataDeliveryS3Config: flattenS3Config(ctx, apiObject.LargeDataDeliveryS3Config),
+	}
+}
+
+func flattenS3Config(ctx context.Context, apiObject *bedrock_types.S3Config) *s3ConfigModel {
+	if apiObject == nil {
+		return nil
+	}
+
+	return &s3ConfigModel{
+		BucketName: flex.StringToFramework(ctx, apiObject.BucketName),
+		KeyPrefix:  flex.StringToFramework(ctx, apiObject.KeyPrefix),
+	}
+}
+
+func expandLoggingConfig(model *loggingConfigModel) *bedrock_types.LoggingConfig {
+	if model == nil {
+		return nil
+	}
+
+	apiObject := &bedrock_types.LoggingConfig{
+		EmbeddingDataDeliveryEnabled: model.EmbeddingDataDeliveryEnabled.ValueBoolPointer(),
+		ImageDataDeliveryEnabled:     model.ImageDataDeliveryEnabled.ValueBoolPointer(),
+		TextDataDeliveryEnabled:      model.TextDataDeliveryEnabled.ValueBoolPointer(),
+	}
+	if model.CloudWatchConfig != nil {
+		apiObject.CloudWatchConfig = expandCloudWatchConfig(model.CloudWatchConfig)
+	}
+	if model.S3Config != nil {
+		apiObject.S3Config = expandS3Config(model.S3Config)
+	}
+
+	return apiObject
+}
+
+func expandCloudWatchConfig(model *cloudWatchConfigModel) *bedrock_types.CloudWatchConfig {
+	if model == nil {
+		return nil
+	}
+
+	apiObject := &bedrock_types.CloudWatchConfig{
+		LogGroupName:              model.LogGroupName.ValueStringPointer(),
+		RoleArn:                   model.RoleArn.ValueStringPointer(),
+		LargeDataDeliveryS3Config: expandS3Config(model.LargeDataDeliveryS3Config),
+	}
+
+	return apiObject
+}
+
+func expandS3Config(model *s3ConfigModel) *bedrock_types.S3Config {
+	if model == nil {
+		return nil
+	}
+
+	apiObject := &bedrock_types.S3Config{
+		BucketName: model.BucketName.ValueStringPointer(),
+		KeyPrefix:  model.KeyPrefix.ValueStringPointer(),
+	}
+
+	return apiObject
 }

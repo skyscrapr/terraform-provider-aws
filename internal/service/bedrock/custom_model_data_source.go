@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
-	bedrock_types "github.com/aws/aws-sdk-go-v2/service/bedrock/types"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -21,6 +19,7 @@ import (
 )
 
 // @FrameworkDataSource
+// @Tags(identifierAttribute="model_arn")
 func newDataSourceCustomModel(context.Context) (datasource.DataSourceWithConfigure, error) {
 	return &dataSourceCustomModel{}, nil
 }
@@ -40,6 +39,9 @@ func (d *dataSourceCustomModel) Schema(ctx context.Context, req datasource.Schem
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
+				Computed: true,
+			},
+			"model_id": schema.StringAttribute{
 				Required: true,
 			},
 			"base_model_arn": schema.StringAttribute{
@@ -138,22 +140,23 @@ func (d *dataSourceCustomModel) Read(ctx context.Context, request datasource.Rea
 }
 
 type customModel struct {
-	ID                   types.String `tfsdk:"id"`
-	ModelID              types.String `tfsdk:"model_id"`
-	BaseModelArn         types.String `tfsdk:"base_model_arn"`
-	CreationTime         types.String `tfsdk:"creation_time"`
-	JobArn               types.String `tfsdk:"job_arn"`
-	ModelArn             types.String `tfsdk:"model_arn"`
-	ModelName            types.String `tfsdk:"model_name"`
-	JobName              types.String `tfsdk:"job_name"`
-	ModelKmsKeyArn       types.String `tfsdk:"model_kms_key_arn"`
-	HyperParameters      types.Map    `tfsdk:"hyper_parameters"`
-	TrainingDataConfig   types.String `tfsdk:"training_data_config"`
-	TrainingMetrics      types.Object `tfsdk:"training_metrics"`
-	ValidationDataConfig types.List   `tfsdk:"validation_data_config"`
-	ValidationMetrics    types.List   `tfsdk:"validation_metrics"`
-	OutputDataConfig     types.String `tfsdk:"output_data_config"`
-	JobTags              types.Map    `tfsdk:"job_tags"`
+	ID                   types.String          `tfsdk:"id"`
+	ModelID              types.String          `tfsdk:"model_id"`
+	BaseModelArn         types.String          `tfsdk:"base_model_arn"`
+	CreationTime         types.String          `tfsdk:"creation_time"`
+	JobArn               types.String          `tfsdk:"job_arn"`
+	ModelArn             types.String          `tfsdk:"model_arn"`
+	ModelName            types.String          `tfsdk:"model_name"`
+	JobName              types.String          `tfsdk:"job_name"`
+	ModelKmsKeyArn       types.String          `tfsdk:"model_kms_key_arn"`
+	HyperParameters      types.Map             `tfsdk:"hyper_parameters"`
+	TrainingDataConfig   types.String          `tfsdk:"training_data_config"`
+	TrainingMetrics      *trainingMetrics      `tfsdk:"training_metrics"`
+	ValidationDataConfig *validationDataConfig `tfsdk:"validation_data_config"`
+	ValidationMetrics    []validationMetrics   `tfsdk:"validation_metrics"`
+	OutputDataConfig     types.String          `tfsdk:"output_data_config"`
+	JobTags              types.Map             `tfsdk:"job_tags"`
+	Tags                 types.Map             `tfsdk:"tags"`
 }
 
 func (data *customModel) refreshFromOutput(ctx context.Context, model *bedrock.GetCustomModelOutput) diag.Diagnostics {
@@ -178,41 +181,4 @@ func (data *customModel) refreshFromOutput(ctx context.Context, model *bedrock.G
 	data.OutputDataConfig = flex.StringToFramework(ctx, model.OutputDataConfig.S3Uri)
 
 	return diags
-}
-
-type trainingMetrics struct {
-	TrainingLoss types.Float64 `tfsdk:"training_loss"`
-}
-
-func flattenTrainingMetrics(ctx context.Context, metrics *bedrock_types.TrainingMetrics) types.Object {
-	attributeTypes := flex.AttributeTypesMust[trainingMetrics](ctx)
-
-	attr := map[string]attr.Value{}
-	trainingLoss := float64(*metrics.TrainingLoss)
-	attr["training_loss"] = flex.Float64ToFramework(ctx, &trainingLoss)
-	return types.ObjectValueMust(attributeTypes, attr)
-}
-
-type validationMetrics struct {
-	ValidationLoss types.Float64 `tfsdk:"validation_loss"`
-}
-
-func flattenValidationMetrics(ctx context.Context, validators []bedrock_types.ValidatorMetric) types.List {
-	attributeTypes := flex.AttributeTypesMust[validationMetrics](ctx)
-	elemType := types.ObjectType{AttrTypes: attributeTypes}
-
-	if validators == nil {
-		return types.ListNull(elemType)
-	}
-
-	attrs := make([]attr.Value, 0, len(validators))
-	for _, validator := range validators {
-		attr := map[string]attr.Value{}
-		validationLoss := float64(*validator.ValidationLoss)
-		attr["validation_loss"] = flex.Float64ToFramework(ctx, &validationLoss)
-		val := types.ObjectValueMust(attributeTypes, attr)
-		attrs = append(attrs, val)
-	}
-
-	return types.ListValueMust(elemType, attrs)
 }

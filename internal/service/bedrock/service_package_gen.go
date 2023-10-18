@@ -18,6 +18,9 @@ func (p *servicePackage) FrameworkDataSources(ctx context.Context) []*types.Serv
 	return []*types.ServicePackageFrameworkDataSource{
 		{
 			Factory: newDataSourceCustomModel,
+			Tags: &types.ServicePackageResourceTags{
+				IdentifierAttribute: "model_arn",
+			},
 		},
 		{
 			Factory: newDataSourceCustomModels,

@@ -26,47 +26,30 @@ import (
 )
 
 type resourceCustomModelModel struct {
-	ID                   types.String               `tfsdk:"id"`
-	BaseModelId          types.String               `tfsdk:"base_model_id"`
-	ClientRequestToken   types.String               `tfsdk:"client_request_token"`
-	CustomModelKmsKeyId  types.String               `tfsdk:"custom_model_kms_key_id"`
-	CustomModelName      types.String               `tfsdk:"custom_model_name"`
-	HyperParameters      types.Map                  `tfsdk:"hyper_parameters"`
-	JobName              types.String               `tfsdk:"job_name"`
-	JobTags              types.Map                  `tfsdk:"job_tags"`
-	OutputDataConfig     types.String               `tfsdk:"output_data_config"`
-	RoleArn              types.String               `tfsdk:"role_arn"`
-	TrainingDataConfig   types.String               `tfsdk:"training_data_config"`
-	BaseModelArn         types.String               `tfsdk:"base_model_arn"`
-	CreationTime         types.String               `tfsdk:"creation_time"`
-	JobArn               types.String               `tfsdk:"job_arn"`
-	ModelArn             types.String               `tfsdk:"model_arn"`
-	ModelKmsKeyArn       types.String               `tfsdk:"model_kms_key_arn"`
-	ModelName            types.String               `tfsdk:"model_name"`
-	ValidationDataConfig *validationDataConfigModel `tfsdk:"validation_data_config"`
-	VpcConfig            types.List                 `tfsdk:"vpc_config"`
-	TrainingMetrics      *trainingMetricsModel      `tfsdk:"training_metrics"`
-	ValidationMetrics    *validationMetricsModel    `tfsdk:"validation_metrics"`
-	Tags                 types.Map                  `tfsdk:"tags"`
-	TagsAll              types.Map                  `tfsdk:"tags_all"`
-	Timeouts             timeouts.Value             `tfsdk:"timeouts"`
-}
-
-type validationDataConfigModel struct {
-	Validators types.Set `tfsdk:"validators"`
-}
-
-type vpcConfigModel struct {
-	SecurityGroupIds types.Set `tfsdk:"security_group_ids"`
-	SubnetIds        types.Set `tfsdk:"subnet_ids"`
-}
-
-type trainingMetricsModel struct {
-	TrainingLoss types.Int64 `tfsdk:"training_loss"`
-}
-
-type validationMetricsModel struct {
-	ValidationLoss types.Int64 `tfsdk:"validation_loss"`
+	ID                   types.String          `tfsdk:"id"`
+	BaseModelId          types.String          `tfsdk:"base_model_id"`
+	ClientRequestToken   types.String          `tfsdk:"client_request_token"`
+	CustomModelKmsKeyId  types.String          `tfsdk:"custom_model_kms_key_id"`
+	CustomModelName      types.String          `tfsdk:"custom_model_name"`
+	HyperParameters      types.Map             `tfsdk:"hyper_parameters"`
+	JobName              types.String          `tfsdk:"job_name"`
+	JobTags              types.Map             `tfsdk:"job_tags"`
+	OutputDataConfig     types.String          `tfsdk:"output_data_config"`
+	RoleArn              types.String          `tfsdk:"role_arn"`
+	TrainingDataConfig   types.String          `tfsdk:"training_data_config"`
+	BaseModelArn         types.String          `tfsdk:"base_model_arn"`
+	CreationTime         types.String          `tfsdk:"creation_time"`
+	JobArn               types.String          `tfsdk:"job_arn"`
+	ModelArn             types.String          `tfsdk:"model_arn"`
+	ModelKmsKeyArn       types.String          `tfsdk:"model_kms_key_arn"`
+	ModelName            types.String          `tfsdk:"model_name"`
+	ValidationDataConfig *validationDataConfig `tfsdk:"validation_data_config"`
+	VpcConfig            types.List            `tfsdk:"vpc_config"`
+	TrainingMetrics      *trainingMetrics      `tfsdk:"training_metrics"`
+	ValidationMetrics    []validationMetrics   `tfsdk:"validation_metrics"`
+	Tags                 types.Map             `tfsdk:"tags"`
+	TagsAll              types.Map             `tfsdk:"tags_all"`
+	Timeouts             timeouts.Value        `tfsdk:"timeouts"`
 }
 
 // @FrameworkResource
@@ -190,15 +173,17 @@ func (r *resourceCustomModel) Schema(ctx context.Context, request resource.Schem
 			},
 			"training_metrics": schema.SingleNestedBlock{
 				Attributes: map[string]schema.Attribute{
-					"training_loss": schema.Int64Attribute{
+					"training_loss": schema.Float64Attribute{
 						Computed: true,
 					},
 				},
 			},
-			"validation_metrics": schema.SingleNestedBlock{
-				Attributes: map[string]schema.Attribute{
-					"validation_loss": schema.Int64Attribute{
-						Computed: true,
+			"validation_metrics": schema.ListNestedBlock{
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"validation_loss": schema.Float64Attribute{
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -249,7 +234,7 @@ func (r *resourceCustomModel) Create(ctx context.Context, req resource.CreateReq
 	if !data.CustomModelKmsKeyId.IsNull() {
 		input.CustomModelKmsKeyId = data.CustomModelKmsKeyId.ValueStringPointer()
 	}
-	var vpcConfigs []vpcConfigModel
+	var vpcConfigs []vpcConfig
 	resp.Diagnostics.Append(data.VpcConfig.ElementsAs(ctx, &vpcConfigs, false)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -302,23 +287,52 @@ func (r *resourceCustomModel) Create(ctx context.Context, req resource.CreateReq
 }
 
 func (r *resourceCustomModel) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state resourceModelInvocationLoggingConfigurationModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	var data resourceCustomModelModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	conn := r.Meta().BedrockClient(ctx)
-	output, err := conn.GetModelInvocationLoggingConfiguration(ctx, &bedrock.GetModelInvocationLoggingConfigurationInput{})
+
+	modelId := data.ID
+	input := &bedrock.GetCustomModelInput{
+		ModelIdentifier: modelId.ValueStringPointer(),
+	}
+	output, err := conn.GetCustomModel(ctx, input)
 	if err != nil {
-		resp.Diagnostics.AddError("failed to get model invocation logging configuration", err.Error())
+		// If we got here, the state has the model name and the job arn.
+		// Should we check for tainted state instead?
+		tflog.Info(ctx, "resourceCustomModelRead: Error reading Bedrock Custom Model. Ignoring to allow destroy to attempt to cleanup.")
+		// resp.Diagnostics.AddError("freading Bedrock Custom Model", err.Error())
 		return
 	}
 
-	state.ID = flex.StringValueToFramework(ctx, r.Meta().Region)
-	state.LoggingConfig = flattenLoggingConfig(ctx, output.LoggingConfig)
+	data.BaseModelArn = flex.StringToFramework(ctx, output.BaseModelArn)
+	data.CreationTime = flex.StringValueToFramework(ctx, output.CreationTime.Format((time.RFC3339)))
+	data.HyperParameters = flex.FlattenFrameworkStringValueMap(ctx, output.HyperParameters)
+	data.JobArn = flex.StringToFramework(ctx, output.JobArn)
+	// This is nil in the model object - could be a bug
+	// However this is already in state so we can skip setting this here and avoid a forced update due to value change.
+	// d.Set("job_name", model.JobName)
+	data.ModelArn = flex.StringToFramework(ctx, output.ModelArn)
+	data.ModelKmsKeyArn = flex.StringToFramework(ctx, output.ModelKmsKeyArn)
+	data.ModelName = flex.StringToFramework(ctx, output.ModelName)
+	data.OutputDataConfig = flex.StringToFramework(ctx, output.OutputDataConfig.S3Uri)
+	data.TrainingDataConfig = flex.StringToFramework(ctx, output.TrainingDataConfig.S3Uri)
+	trainingLoss := float64(*output.TrainingMetrics.TrainingLoss)
+	data.TrainingMetrics.TrainingLoss = flex.Float64ToFramework(ctx, &trainingLoss)
+	data.ValidationDataConfig = flattenValidationDataConfig(ctx, output.ValidationDataConfig)
+	data.ValidationMetrics = flattenValidationMetrics(ctx, output.ValidationMetrics)
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	jobTags, err := listTags(ctx, conn, *output.JobArn)
+	if err != nil {
+		resp.Diagnostics.AddError("reading Tags for Job", err.Error())
+		return
+	}
+	data.JobTags = flex.FlattenFrameworkStringValueMap(ctx, jobTags.IgnoreAWS().Map())
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *resourceCustomModel) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
