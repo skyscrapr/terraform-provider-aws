@@ -12,6 +12,7 @@ import (
 	bedrock_types "github.com/aws/aws-sdk-go-v2/service/bedrock/types"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -24,33 +25,6 @@ import (
 	tftags "github.com/hashicorp/terraform-provider-aws/internal/tags"
 	"github.com/hashicorp/terraform-provider-aws/names"
 )
-
-type resourceCustomModelModel struct {
-	ID                   types.String          `tfsdk:"id"`
-	BaseModelId          types.String          `tfsdk:"base_model_id"`
-	ClientRequestToken   types.String          `tfsdk:"client_request_token"`
-	CustomModelKmsKeyId  types.String          `tfsdk:"custom_model_kms_key_id"`
-	CustomModelName      types.String          `tfsdk:"custom_model_name"`
-	HyperParameters      types.Map             `tfsdk:"hyper_parameters"`
-	JobName              types.String          `tfsdk:"job_name"`
-	JobTags              types.Map             `tfsdk:"job_tags"`
-	OutputDataConfig     types.String          `tfsdk:"output_data_config"`
-	RoleArn              types.String          `tfsdk:"role_arn"`
-	TrainingDataConfig   types.String          `tfsdk:"training_data_config"`
-	BaseModelArn         types.String          `tfsdk:"base_model_arn"`
-	CreationTime         types.String          `tfsdk:"creation_time"`
-	JobArn               types.String          `tfsdk:"job_arn"`
-	ModelArn             types.String          `tfsdk:"model_arn"`
-	ModelKmsKeyArn       types.String          `tfsdk:"model_kms_key_arn"`
-	ModelName            types.String          `tfsdk:"model_name"`
-	ValidationDataConfig *validationDataConfig `tfsdk:"validation_data_config"`
-	VpcConfig            types.List            `tfsdk:"vpc_config"`
-	TrainingMetrics      *trainingMetrics      `tfsdk:"training_metrics"`
-	ValidationMetrics    []validationMetrics   `tfsdk:"validation_metrics"`
-	Tags                 types.Map             `tfsdk:"tags"`
-	TagsAll              types.Map             `tfsdk:"tags_all"`
-	Timeouts             timeouts.Value        `tfsdk:"timeouts"`
-}
 
 // @FrameworkResource
 // @Tags(identifierAttribute="model_arn")
@@ -283,6 +257,7 @@ func (r *resourceCustomModel) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	resp.Diagnostics.Append(data.refresh(ctx, conn)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -295,43 +270,7 @@ func (r *resourceCustomModel) Read(ctx context.Context, req resource.ReadRequest
 
 	conn := r.Meta().BedrockClient(ctx)
 
-	modelId := data.ID
-	input := &bedrock.GetCustomModelInput{
-		ModelIdentifier: modelId.ValueStringPointer(),
-	}
-	output, err := conn.GetCustomModel(ctx, input)
-	if err != nil {
-		// If we got here, the state has the model name and the job arn.
-		// Should we check for tainted state instead?
-		tflog.Info(ctx, "resourceCustomModelRead: Error reading Bedrock Custom Model. Ignoring to allow destroy to attempt to cleanup.")
-		// resp.Diagnostics.AddError("freading Bedrock Custom Model", err.Error())
-		return
-	}
-
-	data.BaseModelArn = flex.StringToFramework(ctx, output.BaseModelArn)
-	data.CreationTime = flex.StringValueToFramework(ctx, output.CreationTime.Format((time.RFC3339)))
-	data.HyperParameters = flex.FlattenFrameworkStringValueMap(ctx, output.HyperParameters)
-	data.JobArn = flex.StringToFramework(ctx, output.JobArn)
-	// This is nil in the model object - could be a bug
-	// However this is already in state so we can skip setting this here and avoid a forced update due to value change.
-	// d.Set("job_name", model.JobName)
-	data.ModelArn = flex.StringToFramework(ctx, output.ModelArn)
-	data.ModelKmsKeyArn = flex.StringToFramework(ctx, output.ModelKmsKeyArn)
-	data.ModelName = flex.StringToFramework(ctx, output.ModelName)
-	data.OutputDataConfig = flex.StringToFramework(ctx, output.OutputDataConfig.S3Uri)
-	data.TrainingDataConfig = flex.StringToFramework(ctx, output.TrainingDataConfig.S3Uri)
-	trainingLoss := float64(*output.TrainingMetrics.TrainingLoss)
-	data.TrainingMetrics.TrainingLoss = flex.Float64ToFramework(ctx, &trainingLoss)
-	data.ValidationDataConfig = flattenValidationDataConfig(ctx, output.ValidationDataConfig)
-	data.ValidationMetrics = flattenValidationMetrics(ctx, output.ValidationMetrics)
-
-	jobTags, err := listTags(ctx, conn, *output.JobArn)
-	if err != nil {
-		resp.Diagnostics.AddError("reading Tags for Job", err.Error())
-		return
-	}
-	data.JobTags = flex.FlattenFrameworkStringValueMap(ctx, jobTags.IgnoreAWS().Map())
-
+	resp.Diagnostics.Append(data.refresh(ctx, conn)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -396,4 +335,73 @@ func waitForModelCustomizationJob(ctx context.Context, conn *bedrock.Client, job
 			return retry.NonRetryableError(fmt.Errorf(*jobEnd.FailureMessage))
 		}
 	})
+}
+
+type resourceCustomModelModel struct {
+	ID                   types.String          `tfsdk:"id"`
+	BaseModelId          types.String          `tfsdk:"base_model_id"`
+	ClientRequestToken   types.String          `tfsdk:"client_request_token"`
+	CustomModelKmsKeyId  types.String          `tfsdk:"custom_model_kms_key_id"`
+	CustomModelName      types.String          `tfsdk:"custom_model_name"`
+	HyperParameters      types.Map             `tfsdk:"hyper_parameters"`
+	JobName              types.String          `tfsdk:"job_name"`
+	JobTags              types.Map             `tfsdk:"job_tags"`
+	OutputDataConfig     types.String          `tfsdk:"output_data_config"`
+	RoleArn              types.String          `tfsdk:"role_arn"`
+	TrainingDataConfig   types.String          `tfsdk:"training_data_config"`
+	BaseModelArn         types.String          `tfsdk:"base_model_arn"`
+	CreationTime         types.String          `tfsdk:"creation_time"`
+	JobArn               types.String          `tfsdk:"job_arn"`
+	ModelArn             types.String          `tfsdk:"model_arn"`
+	ModelKmsKeyArn       types.String          `tfsdk:"model_kms_key_arn"`
+	ModelName            types.String          `tfsdk:"model_name"`
+	ValidationDataConfig *validationDataConfig `tfsdk:"validation_data_config"`
+	VpcConfig            types.List            `tfsdk:"vpc_config"`
+	TrainingMetrics      *trainingMetrics      `tfsdk:"training_metrics"`
+	ValidationMetrics    []validationMetrics   `tfsdk:"validation_metrics"`
+	Tags                 types.Map             `tfsdk:"tags"`
+	TagsAll              types.Map             `tfsdk:"tags_all"`
+	Timeouts             timeouts.Value        `tfsdk:"timeouts"`
+}
+
+func (data *resourceCustomModelModel) refresh(ctx context.Context, conn *bedrock.Client) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	modelId := data.ID
+	input := &bedrock.GetCustomModelInput{
+		ModelIdentifier: modelId.ValueStringPointer(),
+	}
+	output, err := conn.GetCustomModel(ctx, input)
+	if err != nil {
+		// If we got here, the state has the model name and the job arn.
+		// Should we check for tainted state instead?
+		tflog.Info(ctx, "resourceCustomModelRead: Error reading Bedrock Custom Model. Ignoring to allow destroy to attempt to cleanup.")
+		return diags
+	}
+
+	data.BaseModelArn = flex.StringToFramework(ctx, output.BaseModelArn)
+	data.CreationTime = flex.StringValueToFramework(ctx, output.CreationTime.Format((time.RFC3339)))
+	data.HyperParameters = flex.FlattenFrameworkStringValueMap(ctx, output.HyperParameters)
+	data.JobArn = flex.StringToFramework(ctx, output.JobArn)
+	// This is nil in the model object - could be a bug
+	// However this is already in state so we can skip setting this here and avoid a forced update due to value change.
+	// d.Set("job_name", model.JobName)
+	data.ModelArn = flex.StringToFramework(ctx, output.ModelArn)
+	data.ModelKmsKeyArn = flex.StringToFramework(ctx, output.ModelKmsKeyArn)
+	data.ModelName = flex.StringToFramework(ctx, output.ModelName)
+	data.OutputDataConfig = flex.StringToFramework(ctx, output.OutputDataConfig.S3Uri)
+	data.TrainingDataConfig = flex.StringToFramework(ctx, output.TrainingDataConfig.S3Uri)
+	trainingLoss := float64(*output.TrainingMetrics.TrainingLoss)
+	data.TrainingMetrics.TrainingLoss = flex.Float64ToFramework(ctx, &trainingLoss)
+	data.ValidationDataConfig = flattenValidationDataConfig(ctx, output.ValidationDataConfig)
+	data.ValidationMetrics = flattenValidationMetrics(ctx, output.ValidationMetrics)
+
+	jobTags, err := listTags(ctx, conn, *output.JobArn)
+	if err != nil {
+		diags.AddError("reading Tags for Job", err.Error())
+		return diags
+	}
+	data.JobTags = flex.FlattenFrameworkStringValueMap(ctx, jobTags.IgnoreAWS().Map())
+
+	return diags
 }
