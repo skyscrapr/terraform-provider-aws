@@ -391,8 +391,7 @@ func (data *resourceCustomModelModel) refresh(ctx context.Context, conn *bedrock
 	data.ModelName = flex.StringToFramework(ctx, output.ModelName)
 	data.OutputDataConfig = flex.StringToFramework(ctx, output.OutputDataConfig.S3Uri)
 	data.TrainingDataConfig = flex.StringToFramework(ctx, output.TrainingDataConfig.S3Uri)
-	trainingLoss := float64(*output.TrainingMetrics.TrainingLoss)
-	data.TrainingMetrics.TrainingLoss = flex.Float64ToFramework(ctx, &trainingLoss)
+	data.TrainingMetrics = flattenTrainingMetrics(ctx, output.TrainingMetrics)
 	data.ValidationDataConfig = flattenValidationDataConfig(ctx, output.ValidationDataConfig)
 	data.ValidationMetrics = flattenValidationMetrics(ctx, output.ValidationMetrics)
 
